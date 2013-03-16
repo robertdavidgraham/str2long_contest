@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include "str2long.h"
 
 int error;
@@ -92,6 +93,7 @@ static struct fps funcs[] = {
   { str2long_dokoto_2, "dokoto_2", false }, // incorrect outptu 
   { str2long_robert, "robert", false }, // incorrect output
   { str2long_robert_2, "robert_2", true }, 
+  { str2long_robert_3, "robert_3", true },
   { str2long_till, "till", true },
   { str2long_gedare, "gedare", false }, // incorrect output
   { str2long_gedare_2, "gedare_2", false }, // incorrect output
@@ -111,6 +113,7 @@ static struct fps funcs[] = {
 
 static long n_tests;
 static int verbose = 0;
+static int benchmark_good = 0; /* use only valid integers for benchmark */
 
 #define MAX_TESTS 11000000
 struct testcase *tests;
@@ -126,10 +129,10 @@ static void generate_test (const char *s)
   n_tests++;
 }
 
-static double subtimes (struct timespec stop, struct timespec start)
+static double subtimes (clock_t stop, clock_t start)
 {
-  double stopd = (1000000000.0 * stop.tv_sec) + stop.tv_nsec;
-  double startd = (1000000000.0 * start.tv_sec) + start.tv_nsec;
+  double stopd = (1000.0 * stop) / CLOCKS_PER_SEC;
+  double startd = (1000.0 * start) / CLOCKS_PER_SEC;
   return stopd - startd;
 }
 
@@ -139,10 +142,11 @@ static void run_tests (void)
   for (rep=0; rep<REPS; rep++) {
     int i;
     for (i=0; funcs[i].func; i++) {
+
       if (!funcs[i].works) continue;
-      struct timespec start;
-      int res = clock_gettime (CLOCK_MONOTONIC, &start);
-      assert (res==0);
+
+      clock_t start = clock ();
+
       int j;
       for (j=0; j<n_tests; j++) {
 	error = 0;
@@ -152,10 +156,16 @@ static void run_tests (void)
 		 (error != 0 && tests[j].error != 0))
 		);
       }
-      struct timespec stop;
-      res = clock_gettime (CLOCK_MONOTONIC, &stop);
-      assert (res==0);
+
+      clock_t stop = clock ();
+
       funcs[i].times[rep] = subtimes (stop, start);
+      if (verbose) {
+	int x = fprintf(stderr, "%u/%u %4.0f %s           ", rep, REPS, funcs[i].times[rep], funcs[i].name);
+	for (j=0; j<x; j++) {
+	  putc('\b', stderr);
+	}
+      }
     }
   }
 }
@@ -178,7 +188,14 @@ int main (int argc, char *argv[]) {
 
   assert (sizeof(struct testcase) == 64);
 
-  if (argc == 2 && strcmp (argv[1], "-v") == 0) verbose = 1;
+  int i;
+  for (i=1; i<argc; i++) {
+    if (strcmp (argv[i], "-v") == 0) verbose = 1;
+    if (strcmp (argv[i], "-g") == 0) benchmark_good = 1;
+  }
+
+  if (verbose)
+    printf("sizeof(long) = %u bits\n", (unsigned)sizeof(long)*8);
 
   n_tests = 0;
   tests = (struct testcase *) malloc (MAX_TESTS * sizeof (struct testcase));
@@ -258,7 +275,27 @@ int main (int argc, char *argv[]) {
 #endif
 
 #define RANGE 100000
+  if (benchmark_good) {
+    srand (time(NULL));
+    int i;
+    for (i=0; i<(10*1000*1000); i++) {
+      char str[35];
+      int pos = 0;
+      if (rand()%2==0) {
+	str[pos] = '-';
+	pos++;
+      }
+      int l = 1 + rand()%30;
+      int j;
+      for (j=0; j<l; j++) {
+	str[pos] = '0' + rand()%10;
+	pos++;
+      }
+      str[pos] = 0;
+      generate_test (str);
+    }
 
+  } else {
 #if 1
   {
     long l = LONG_MAX - RANGE;
@@ -336,15 +373,15 @@ int main (int argc, char *argv[]) {
     }
   }
 #endif
+  }
 
   printf ("generated %ld tests\n", n_tests);
 
   run_tests();
 
-  int i;
   printf ("ran, but didn't test:\n");
   for (i=0; funcs[i].func; i++) {
-    if (!funcs[i].works) printf ("  %s\n", funcs[i].name);
+    if (!funcs[i].works) fprintf (stderr, "  %s\n", funcs[i].name);
   }
   printf ("tested:\n");
   for (i=0; funcs[i].func; i++) {
@@ -357,7 +394,7 @@ int main (int argc, char *argv[]) {
 	if (t<min) min = t;
 	if (t>max) max = t;
       }
-      printf ("  %lf %lf %s\n", min, max, funcs[i].name);
+      printf ("  %4.0lf %4.0lf %s\n", min*1000000.0, max*1000000.0, funcs[i].name);
     }
   }
 

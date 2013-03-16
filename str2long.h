@@ -84,6 +84,7 @@ long str2long_gedare_2 (const char *);
 long str2long_ben (const char *);
 long str2long_markus_2 (const char *);
 long str2long_robert_2 (const char *);
+long str2long_robert_3 (const char *);
 long str2long_ryanf_2 (const char *);
 long str2long_ken_4 (const char *);
 long str2long_adam_4 (const char *);
